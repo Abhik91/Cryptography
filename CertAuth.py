@@ -13,15 +13,16 @@
 #						to challenge students to write a program that interacts with#
 #						given certificates.                                         #
 # Author - Abhik Dey (1216907460)                                                   #
-#          Abhilasha Mandal ()                                                      #
+#          Abhilasha Mandal (1217160477)                                            #
 #####################################################################################
 
 from OpenSSL import crypto
-from Crypto.Util import asn1
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
-from Crypto.Util.asn1 import DerSequence, DerObject
-import Crypto.Hash.SHA
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
 import sys
 
 
@@ -43,7 +44,7 @@ def read_certificates(backup_file,root_cert_file,subject_cert_file,password):
 	#   c. p12 -> PKCS12 object containing details of cert_bckup.p12                    #
 	#       																			#
 	#   Authors - Abhik Dey (1216907406) 												#			
-	#   			 Abhilasha Mandal ()                                                #
+	#   	      Abhilasha Mandal (1217160477)                                         #
 	#####################################################################################
 
    # Read subject.crt
@@ -56,9 +57,7 @@ def read_certificates(backup_file,root_cert_file,subject_cert_file,password):
 
     # Read cert_bckup.p12
     with open(backup_file, "rb") as cert_bckup:
-    	bckup = cert_bckup.read()
-    	p12 = crypto.load_pkcs12(bckup, password)
-
+    	p12 = crypto.load_pkcs12(cert_bckup.read(),password)
 
     sub_certificate = crypto.load_certificate(crypto.FILETYPE_PEM, sub)
     root_certificate = crypto.load_certificate(crypto.FILETYPE_PEM, root)
@@ -78,7 +77,7 @@ def verify_cert(sub, root):
     #                                                                          # 
     #                                                                          #
 	#  Authors - Abhik Dey (1216907406)                                        #
-	#			 Abhilasha Mandal ()                                           #
+	#			 Abhilasha Mandal (1217160477)                                 #
     ############################################################################
     
     try:
@@ -119,7 +118,7 @@ def print_subject_cert_details(sub):
 	#   Returns: N/A                                                                       # 
     #                                                                                      #
 	#   Authors - Abhik Dey (1216907406)                                                   #
-	#   		  Abhilasha Mandal ()                                                      #
+	#   		  Abhilasha Mandal (1217160477)                                            #
     ########################################################################################
 
 	subject = sub.get_subject()
@@ -139,39 +138,48 @@ def print_subject_cert_details(sub):
 	print ("e. Not Valid Before- ",not_valid_before.decode('UTF-8'))
 	print ("f. Not Valid After - ",not_valid_after.decode('UTF-8'))
 	
-def print_subject_pub_priv_key(sub,p12):
-    ##################################################################################################
-	#   print_subject_pub_priv_key -> The function prints the public and private keys of subject.crt #
-	#								 a. Public Key Modulus (n)										 #
-	#								 b. Public Key Exponent (e)										 #
-	#								 c. Private Key Exponent (d) 									 #
-    #																								 #
-	#   Parameters:																					 #
-	#   a. sub -> X509 object containing certificate details of subject.crt 						 #	
-	#   b. p12 -> PKCS12 object containing details of cert_bckup.p12 								 #
-    #																								 #
-	#   Returns: 																					 #	
-	#   a. pubkey -> Public key of subject.crt                                                       #
-	#   b. private_key -> Private key of subject.crt                                                 #
-    #                                                                                                #
-    #                                                                                                #
-	#   Authors - Abhik Dey (1216907406)                                                             #
-	#   		  Abhilasha Mandal ()                                                                #
-	##################################################################################################
+def print_subject_pub_priv_key(subject_cert_file,root_cert_file,backup_file,password):
+	####################################################################################################
+    #   print_subject_pub_priv_key -> The function prints the public and private keys of subject.crt   #
+    #						          a. Public Key Modulus (n)										   #
+	#								  b. Public Key Exponent (e)									   #
+	#								  c. Private Key Exponent (d) 									   #
+	#   Parameters:																		               #
+	#   a.  backup_file -> path of cert_bckup.p12 									                   #
+	#   b. 	root_cert_file -> path of root.crt 														   #
+	#   c.  subject_cert_file -> path of subject.crt 											       #	
+	#   d.  password -> Password to open cert_bckup.p12 file 						 	               # 
+	#																					               #
+	#   Returns: 																					   #	
+	#   a. Public key of subject.crt                                                                   #
+	#   b. Private key of subject.crt                                                                  # 
+	#       																			               #
+	#   Authors - Abhik Dey (1216907406) 												               #		 	
+	#   	      Abhilasha Mandal (1217160477)                                                        #
+	####################################################################################################
 
-	public_key = sub.get_pubkey()
-	pubKeyString = crypto.dump_publickey(crypto.FILETYPE_PEM, public_key)
-	pubkey = RSA.importKey(pubKeyString)
-	
-	print ("3. Subject Certificate Keys")
-	print ("\na. Public key Modulus (n) : ")
-	print(pubkey.n)
-	print ("\nb. Public key Exponent (e) : ",pubkey.e)
-	
-	private_key = print_bckup_priv_key(p12)
-	
-	return pubkey,private_key
+	# Read subject.crt
+    with open(subject_cert_file, 'r') as sub_cert:
+        sub = sub_cert.read()
 
+    # Read root.crt
+    with open(root_cert_file, 'r') as root_cert:
+        root = root_cert.read()
+
+    # Read cert_bckup.p12
+    with open(backup_file, "rb") as cert_bckup:
+    	p12 = crypto.load_pkcs12(cert_bckup.read(),password)
+
+    sub_certificate = x509.load_pem_x509_certificate(bytes(sub, 'UTF-8'), default_backend())    
+
+    print ("3. Subject Certificate Keys")
+    print ("\na. Public Key Modulus (n) : ")
+    print (sub_certificate.public_key().public_numbers().n)
+    print ("\nb. Public Key Exponent (e) : ", sub_certificate.public_key().public_numbers().e)
+
+    privkey = print_bckup_priv_key(p12)
+
+    return sub_certificate.public_key(), privkey
 
 def print_bckup_priv_key(p12):
 	###################################################################################################
@@ -182,17 +190,18 @@ def print_bckup_priv_key(p12):
 	#   a. p12 -> PKCS12 object containing details of cert_bckup.p12                                  #
 	#  																								  #
 	#   Returns: 																					  #
-	#   a. private_key -> Private key of subject.crt 												  #				
+	#   a. privkey -> Private key of subject.crt 		   										      #				
 	# 																								  # 		
 	#																								  #	
 	#   Authors - Abhik Dey (1216907406)															  #	
-	#   	      Abhilasha Mandal ()																  #	
+	#   	      Abhilasha Mandal (1217160477)											     		  #	
 	###################################################################################################
+    
     private_key = p12.get_privatekey()
     privKeyString = crypto.dump_privatekey(crypto.FILETYPE_PEM, private_key)
-    privkey = RSA.importKey(privKeyString)
+    privkey = serialization.load_pem_private_key(privKeyString, None, default_backend())
     print ("\nc. Private Key Exponent (d) : ")
-    print (privkey.d)
+    print (privkey.private_numbers().d)
     return privkey
     
 	
@@ -204,46 +213,45 @@ def print_root_pub_key(root_cert_file):
 	#								 b. Public Key Exponent (e)										  #
 	#   																							  #
 	#  Parameters:																					  #	
-	#   a. root_cert_file -> X509 object containing certificate details of root.crt                   #
+	#   a. root_cert_file -> path of the file root.crt                                                #
 	#  																								  #
 	#   Returns: N/A 															      				  #				
 	# 																								  # 		
 	#																								  #	
 	#   Authors - Abhik Dey (1216907406)															  #	
-	#   	      Abhilasha Mandal ()																  #	
+	#   	      Abhilasha Mandal (1217160477)														  #	
 	###################################################################################################
 
-	public_key_root = root_cert_file.get_pubkey()
-	pubKeyStringRoot = crypto.dump_publickey(crypto.FILETYPE_PEM, public_key_root)
-	pubkey = RSA.importKey(pubKeyStringRoot)
-	print ("4. Root Public Keys: ")
-	print ("\na. Public key Modulus (n) : ")
-	print(pubkey.n)
-	print ("\nb. Public key Exponent (e) : ",pubkey.e)
+	# Read root.crt
+    with open(root_cert_file, 'r') as root_cert:
+        root = root_cert.read()
 
 
+    root_certificate = x509.load_pem_x509_certificate(bytes(root, 'UTF-8'), default_backend())
+    print ("4. Root Public Keys: ")
+    print ("\na. Public key Modulus (n) : ")
+    print(root_certificate.public_key().public_numbers().n)
+    print ("\nb. Public key Exponent (e) : ",root_certificate.public_key().public_numbers().e)
 
-def print_signature_in_hex(sub):
+def print_signature_in_hex(subject_cert_file):
     ###################################################################################################
 	#  print_signature_in_hex -> The function prints the hex signature on the Subject’s certificate	  #	
 	#   																							  #
 	#  Parameters:																					  #	
-	#  a. sub -> X509 object containing certificate details of subject.crt							  #
+	#  a. subject_cert_file -> The path of the file subject.crt							              #
 	#                                                                                                 #
-	#  Returns: bytes_signature.hex() -> the hex signature on the Subject’s certificate  			  #				
+	#  Returns: sub_certificate.signature.hex() -> the hex signature on the Subject’s certificate  	  #				
 	# 																								  # 		
 	#																								  #	
 	#   Authors - Abhik Dey (1216907406)															  #	
-	#   	      Abhilasha Mandal ()																  #	
+	#   	      Abhilasha Mandal (1217160477)														  #	
 	###################################################################################################
 
-    der = DerSequence()
-    der.decode(crypto.dump_certificate(crypto.FILETYPE_ASN1, sub))
-    signature = der[2]
-    signature_der_obj = DerObject()
-    signature_der_obj.decode(signature)
-    bytes_signature=signature_der_obj.payload[1:] #skip leading zeros
-    return bytes_signature.hex()
+    with open(subject_cert_file, 'r') as sub_cert:
+        sub = sub_cert.read()
+
+    sub_certificate = x509.load_pem_x509_certificate(bytes(sub,'UTF-8'), default_backend())
+    return sub_certificate.signature.hex()
 
 def encrypt(pubkey, message):
 	###################################################################################################
@@ -261,12 +269,11 @@ def encrypt(pubkey, message):
 	# 																								  # 		
 	#																								  #	
 	#   Authors - Abhik Dey (1216907406)															  #	
-	#   	      Abhilasha Mandal ()																  #	
+	#   	      Abhilasha Mandal (1217160477)														  #	
 	###################################################################################################
 	
-	cipher_object = PKCS1_OAEP.new(key=pubkey, hashAlgo=Crypto.Hash.SHA256, mgfunc=lambda x,y: Crypto.Signature.PKCS1_PSS.MGF1(x,y,Crypto.Hash.SHA256) )
-	ciphertext = cipher_object.encrypt(message)
-	return ciphertext
+	cipher_object = pubkey.encrypt(message,padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(), label=None))
+	return cipher_object
 
 
 def decrypt(privkey, ciphermessage):
@@ -285,11 +292,10 @@ def decrypt(privkey, ciphermessage):
 	# 																								  # 		
 	#																								  #	
 	#   Authors - Abhik Dey (1216907406)															  #	
-	#   	      Abhilasha Mandal ()																  #	
+	#   	      Abhilasha Mandal (1217160477)														  #	
 	###################################################################################################
 	
-	cipher_object = PKCS1_OAEP.new(key=privkey, hashAlgo=Crypto.Hash.SHA256, mgfunc=lambda x,y: Crypto.Signature.PKCS1_PSS.MGF1(x,y,Crypto.Hash.SHA256) )
-	plaintext = cipher_object.decrypt(ciphermessage)
+	plaintext = privkey.decrypt(ciphermessage, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(), label=None))
 	return plaintext
 
 def main(backup_file,root_cert_file,subject_cert_file,password):
@@ -308,7 +314,7 @@ def main(backup_file,root_cert_file,subject_cert_file,password):
 	#   Returns: N/A 																		#	
 	#																						#
 	#   Authors - Abhik Dey (1216907406)													#
-	#   		  Abhilasha Mandal ()   													#
+	#   		  Abhilasha Mandal (1217160477)      										#
 	#########################################################################################
 
 	sub, root, p12 = read_certificates(backup_file,root_cert_file,subject_cert_file,password)
@@ -317,12 +323,12 @@ def main(backup_file,root_cert_file,subject_cert_file,password):
 	print ("******************************************************")
 	print_subject_cert_details(sub)
 	print ("******************************************************")
-	sub_pub_key, sub_priv_key = print_subject_pub_priv_key(sub, p12)
+	sub_pub_key, sub_priv_key = print_subject_pub_priv_key(subject_cert_file,root_cert_file,backup_file,password)
 	print ("\n******************************************************")
-	print_root_pub_key(root)
+	print_root_pub_key(root_cert_file)
 	print ("\n******************************************************")
 	print ("5. Subject certificate signature in hex :")
-	print (print_signature_in_hex(sub))
+	print (print_signature_in_hex(subject_cert_file))
 	print ("\n******************************************************")
 	print ("\n6 a. Encrypted Message :")
 	ciphertext = encrypt(sub_pub_key, b'Hello World')
@@ -333,7 +339,7 @@ def main(backup_file,root_cert_file,subject_cert_file,password):
 
 if __name__ == '__main__':
 	
-	'''The program will start exection from here'''
+	'''The program will start from here'''
 	# Takes command line input
 	backup_file = sys.argv[1]
 	root_cert_file = sys.argv[2]
